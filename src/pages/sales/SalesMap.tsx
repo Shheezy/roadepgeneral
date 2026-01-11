@@ -27,9 +27,10 @@ export default function SalesMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [mapboxToken, setMapboxToken] = useState("");
   const [isMapReady, setIsMapReady] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+
 
   useEffect(() => {
     fetchLeads();
@@ -59,10 +60,10 @@ export default function SalesMap() {
     }
   };
 
-  const initializeMap = () => {
-    if (!mapContainer.current || !mapboxToken) return;
+const initializeMap = () => {
+  if (!mapContainer.current) return;
 
-    mapboxgl.accessToken = mapboxToken;
+  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
@@ -73,53 +74,65 @@ export default function SalesMap() {
 
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-    map.current.on("load", () => {
-      setIsMapReady(true);
-      addMarkers();
-    });
+map.current.on("load", () => {
+  setIsMapReady(true);
+});
   };
 
-  const addMarkers = () => {
-    if (!map.current) return;
+ const addMarkers = () => {
+  if (!map.current) return;
 
-    leads.forEach((lead) => {
-      if (lead.latitude && lead.longitude) {
-        const el = document.createElement("div");
-        el.className = "marker";
-        el.style.width = "30px";
-        el.style.height = "30px";
-        el.style.borderRadius = "50%";
-        el.style.backgroundColor = lead.status === "new" ? "#3b82f6" : lead.status === "contacted" ? "#f59e0b" : "#22c55e";
-        el.style.border = "3px solid white";
-        el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
-        el.style.cursor = "pointer";
+  // régi markerek törlése
+  markersRef.current.forEach(marker => marker.remove());
+  markersRef.current = [];
 
-        el.addEventListener("click", () => {
-          setSelectedLead(lead);
-        });
+  leads.forEach((lead) => {
+    if (lead.latitude == null || lead.longitude == null) return;
 
-        new mapboxgl.Marker(el)
-          .setLngLat([lead.longitude, lead.latitude])
-          .addTo(map.current!);
-      }
+    const el = document.createElement("div");
+    el.className = "marker";
+    el.style.width = "30px";
+    el.style.height = "30px";
+    el.style.borderRadius = "50%";
+    el.style.backgroundColor =
+      lead.status === "new"
+        ? "#3b82f6"
+        : lead.status === "contacted"
+        ? "#f59e0b"
+        : "#22c55e";
+    el.style.border = "3px solid white";
+    el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+    el.style.cursor = "pointer";
+
+    el.addEventListener("click", () => {
+      setSelectedLead(lead);
     });
+
+    const marker = new mapboxgl.Marker(el)
+      .setLngLat([lead.longitude, lead.latitude])
+      .addTo(map.current);
+
+    markersRef.current.push(marker);
+  });
+};
+
+
+useEffect(() => {
+  initializeMap();
+
+  return () => {
+    map.current?.remove();
   };
+}, []);
 
-  useEffect(() => {
-    if (mapboxToken && mapContainer.current) {
-      initializeMap();
-    }
 
-    return () => {
-      map.current?.remove();
-    };
-  }, [mapboxToken]);
+useEffect(() => {
+  if (!isMapReady) return;
+  if (leads.length === 0) return;
 
-  useEffect(() => {
-    if (isMapReady && leads.length > 0) {
-      addMarkers();
-    }
-  }, [leads, isMapReady]);
+  addMarkers();
+}, [leads, isMapReady]);
+
 
   const statusColors: Record<string, string> = {
     new: "bg-blue-100 text-blue-800",
@@ -146,46 +159,7 @@ export default function SalesMap() {
           </p>
         </motion.div>
 
-        {!mapboxToken ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Navigation className="h-5 w-5" />
-                  Mapbox beállítása
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-muted-foreground">
-                  A térkép használatához add meg a Mapbox public token-edet.
-                  Regisztrálj a{" "}
-                  <a
-                    href="https://mapbox.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    mapbox.com
-                  </a>{" "}
-                  oldalon és másold be a public token-t.
-                </p>
-                <div className="flex gap-3 max-w-lg">
-                  <Input
-                    placeholder="pk.eyJ1Ijoi..."
-                    value={mapboxToken}
-                    onChange={(e) => setMapboxToken(e.target.value)}
-                  />
-                  <Button onClick={initializeMap} className="gradient-primary">
-                    Térkép betöltése
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ) : (
+        
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Map */}
             <motion.div
@@ -262,7 +236,7 @@ export default function SalesMap() {
               )}
             </motion.div>
           </div>
-        )}
+        
 
         {/* Leads List */}
         <motion.div
